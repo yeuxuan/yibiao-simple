@@ -1,167 +1,224 @@
 # CLAUDE.md
 
+> 变更记录 (Changelog)
+> - 2026-03-15: 初始化架构师自动扫描，全量重写，新增 Mermaid 结构图、模块索引、详细 API 清单、SSE/MCP 说明。
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## 项目概述
+---
 
-这是一个基于 FastAPI + React 的现代化 AI 写标书助手应用，使用 OpenAI API 智能解析招标文件并生成标书内容。项目采用前后端分离架构，提供现代化的Web界面和高性能API服务。
+## 项目愿景与定位
 
-## 常用命令
+AI 写标书助手（yibiao-simple）是一款面向招投标场景的智能写作工具。用户上传招标文件（PDF/Word），AI 自动提取项目概述与技术评分要求，随后一键生成专业三级目录和各章节正文，最终可导出 Word 文档。核心价值：**大幅降低标书撰写门槛，提高投标效率**。
 
-### 开发环境启动
+---
+
+## 架构总览
+
+项目采用前后端分离架构，开发时前后端独立运行，生产/打包时前端静态文件内嵌到 FastAPI 服务中。
+
+```
+用户浏览器
+    |
+    | HTTP / SSE
+    v
+React SPA (localhost:3000 开发 / 同源 生产)
+    |
+    | REST API / SSE
+    v
+FastAPI 后端 (localhost:8000)
+    |
+    |-- OpenAI API（兼容协议，支持自定义 base_url）
+    |-- DuckDuckGo 搜索（duckduckgo-search 库）
+    |-- 文件系统（uploads/ 临时文件，~/.ai_write_helper/ 配置）
+    |-- MCP Server（backend/mcp/server/duckduckgo/ 独立进程）
+```
+
+---
+
+## 模块结构图
+
+```mermaid
+graph TD
+    ROOT["(根) yibiao-simple"] --> BACKEND["backend"]
+    ROOT --> FRONTEND["frontend"]
+    ROOT --> MCP["backend/mcp"]
+
+    BACKEND --> APP["backend/app"]
+    APP --> ROUTERS["routers (6个路由模块)"]
+    APP --> SERVICES["services (3个服务)"]
+    APP --> UTILS["utils (5个工具)"]
+    APP --> MODELS["models/schemas.py"]
+
+    ROUTERS --> R_CONFIG["config.py"]
+    ROUTERS --> R_DOC["document.py"]
+    ROUTERS --> R_OUTLINE["outline.py"]
+    ROUTERS --> R_CONTENT["content.py"]
+    ROUTERS --> R_SEARCH["search.py"]
+    ROUTERS --> R_EXPAND["expand.py"]
+
+    SERVICES --> S_OPENAI["openai_service.py"]
+    SERVICES --> S_FILE["file_service.py"]
+    SERVICES --> S_SEARCH["search_service.py"]
+
+    UTILS --> U_CONFIG["config_manager.py"]
+    UTILS --> U_PROMPT["prompt_manager.py"]
+    UTILS --> U_OUTLINE["outline_util.py"]
+    UTILS --> U_JSON["json_util.py"]
+    UTILS --> U_SSE["sse.py"]
+
+    FRONTEND --> SRC["frontend/src"]
+    SRC --> PAGES["pages (3个页面)"]
+    SRC --> COMPONENTS["components (2个组件)"]
+    SRC --> HOOKS["hooks/useAppState.ts"]
+    SRC --> FSERVICES["services/api.ts"]
+    SRC --> FTYPES["types/index.ts"]
+    SRC --> FUTILS["utils/draftStorage.ts"]
+
+    MCP --> DDGSRV["mcp/server/duckduckgo/main.py"]
+
+    click APP "./backend/CLAUDE.md" "查看 backend 模块文档"
+    click FRONTEND "./frontend/CLAUDE.md" "查看 frontend 模块文档"
+    click MCP "./backend/mcp/CLAUDE.md" "查看 MCP 模块文档"
+```
+
+---
+
+## 模块索引
+
+| 模块路径 | 语言 | 职责简述 | 文档链接 |
+|---|---|---|---|
+| `backend/` | Python | FastAPI 后端，AI 调用、文件处理、API 服务 | [backend/CLAUDE.md](./backend/CLAUDE.md) |
+| `frontend/` | TypeScript/React | SPA 前端，三步流程 UI、状态管理、草稿缓存 | [frontend/CLAUDE.md](./frontend/CLAUDE.md) |
+| `backend/mcp/` | Python | 独立 MCP Server，对外暴露 DuckDuckGo 搜索工具 | [backend/mcp/CLAUDE.md](./backend/mcp/CLAUDE.md) |
+
+---
+
+## 运行与开发
+
+### 一键启动（推荐）
 ```bash
-# 一键启动（推荐）
-python app.py
+# 同时启动前后端（app_launcher.py 协调）
+python app_launcher.py
+```
 
-# 或使用批处理脚本（Windows）
-run.bat
-
-# 分别启动后端
+### 分别启动
+```bash
+# 后端
 cd backend
-pip install -r requirements.txt  
+pip install -r requirements.txt
 python run.py
+# 默认监听 http://localhost:8000
 
-# 分别启动前端
+# 前端
 cd frontend
 npm install
 npm start
+# 默认监听 http://localhost:3000
 ```
 
-### 构建和打包
+### 构建打包（Windows exe）
 ```bash
-# 一键构建exe
 python build.py
-
-# 或使用批处理脚本（Windows）
+# 或
 build.bat
 ```
 
-## 项目架构
+### 关键端口
+| 服务 | 地址 |
+|---|---|
+| 后端 API | http://localhost:8000 |
+| 后端 API 文档 | http://localhost:8000/docs |
+| 健康检查 | http://localhost:8000/health |
+| 前端开发服务器 | http://localhost:3000 |
 
-### 整体架构
-项目采用前后端分离的架构模式：
-- **后端**: FastAPI + uvicorn，提供RESTful API和异步处理
-- **前端**: React + TypeScript + Tailwind CSS，现代化SPA应用
-- **打包**: PyInstaller + 静态文件集成，生成单个exe文件
+### 环境变量
+- `backend/.env.example` — 后端环境变量示例（API Key、base_url 等）
+- `frontend/.env.example` — 前端环境变量示例（`REACT_APP_API_URL`）
+- 用户运行时配置持久化到 `~/.ai_write_helper/user_config.json`（不在 Git 中）
 
-### 后端架构 (FastAPI)
-```
-backend/
-├── app/
-│   ├── main.py              # FastAPI应用入口，路由注册
-│   ├── config.py            # 应用配置和设置
-│   ├── models/
-│   │   └── schemas.py       # Pydantic数据模型定义
-│   ├── routers/             # API路由模块
-│   │   ├── config.py        # 配置管理API
-│   │   ├── document.py      # 文档处理API
-│   │   └── outline.py       # 目录管理API
-│   ├── services/            # 业务逻辑服务
-│   │   ├── openai_service.py    # OpenAI API封装
-│   │   └── file_service.py      # 文件处理服务
-│   └── utils/
-│       └── config_manager.py    # 配置管理工具
-├── requirements.txt         # Python依赖
-└── run.py                  # 后端启动脚本
-```
+---
 
-### 前端架构 (React)
+## 核心业务流程
+
 ```
-frontend/
-├── src/
-│   ├── components/          # 可复用组件
-│   │   ├── ConfigPanel.tsx  # 配置面板组件
-│   │   └── StepBar.tsx      # 步骤导航组件
-│   ├── pages/               # 页面组件
-│   │   ├── DocumentAnalysis.tsx  # 文档分析页面
-│   │   ├── OutlineEdit.tsx       # 目录编辑页面
-│   │   └── ContentEdit.tsx       # 内容编辑页面
-│   ├── services/
-│   │   └── api.ts           # API调用封装
-│   ├── hooks/
-│   │   └── useAppState.ts   # 应用状态管理Hook
-│   ├── types/
-│   │   └── index.ts         # TypeScript类型定义
-│   └── App.tsx             # 主应用组件
-├── package.json
-├── tailwind.config.js       # Tailwind CSS配置
-└── .env                    # 环境变量
+步骤 0（标书解析）：
+  上传 PDF/Word -> /api/document/upload
+  -> 提取文本（pdfplumber / docx2python 多策略）
+  -> /api/document/analyze-stream（SSE）
+  -> 分别提取 projectOverview 和 techRequirements
+
+步骤 1（目录编辑）：
+  projectOverview + techRequirements
+  -> /api/outline/generate（SSE心跳 + 并发批处理）
+     内部：generate_outline_v2 先生成一级提纲 -> 并发补全二三级
+  -> 可选上传旧方案文件 /api/expand/upload（提取已有目录）
+  -> /api/outline/generate-stream（使用旧目录辅助生成）
+
+步骤 2（正文编辑）：
+  单章节 -> /api/content/generate-chapter-stream（SSE）
+  全量导出 -> /api/document/export-word（Word 二进制流）
 ```
 
-### 核心功能模块
+---
 
-#### 1. 配置管理 (backend/app/routers/config.py)
-- 配置保存和加载：`POST /api/config/save`, `GET /api/config/load`
-- 模型列表获取：`POST /api/config/models`
-- 本地配置文件管理（存储在用户目录 `.ai_write_helper/`）
+## API 接口总览
 
-#### 2. 文档处理 (backend/app/routers/document.py) 
-- 文件上传：`POST /api/document/upload`
-- 文档分析：`POST /api/document/analyze` (普通) / `POST /api/document/analyze-stream` (流式)
-- 支持Word (.docx)和PDF (.pdf)格式
+| 前缀 | 方法 | 路径 | 说明 |
+|---|---|---|---|
+| config | POST | /api/config/save | 保存 OpenAI 配置 |
+| config | GET | /api/config/load | 加载配置 |
+| config | POST | /api/config/models | 获取可用模型列表 |
+| document | POST | /api/document/upload | 上传文档（PDF/Word） |
+| document | POST | /api/document/analyze-stream | 流式分析文档（SSE） |
+| document | POST | /api/document/export-word | 导出 Word 文档（二进制流） |
+| outline | POST | /api/outline/generate | 生成目录（SSE心跳+批量） |
+| outline | POST | /api/outline/generate-stream | 流式生成目录（旧方案模式）|
+| content | POST | /api/content/generate-chapter | 生成单章节（同步） |
+| content | POST | /api/content/generate-chapter-stream | 流式生成单章节（SSE） |
+| search | POST/GET | /api/search/ | DuckDuckGo 搜索 |
+| search | POST | /api/search/formatted | 获取格式化搜索结果 |
+| search | POST | /api/search/load-url | 读取网页内容 |
+| expand | POST | /api/expand/upload | 上传旧方案文件，提取已有目录 |
 
-#### 3. 目录管理 (backend/app/routers/outline.py)
-- 目录生成：`POST /api/outline/generate` (普通) / `POST /api/outline/generate-stream` (流式)
-- 内容生成：`POST /api/outline/generate-content` (普通) / `POST /api/outline/generate-content-stream` (流式)
+---
 
-#### 4. OpenAI服务 (backend/app/services/openai_service.py)
-核心AI功能封装：
-- `analyze_document()`: 文档分析，提取项目概述和技术评分要求
-- `generate_outline()`: 基于分析结果生成三级目录结构
-- `generate_content_for_outline()`: 为叶子节点生成具体内容
-- 支持异步和流式响应
+## 测试策略
 
-#### 5. 前端状态管理 (frontend/src/hooks/useAppState.ts)
-使用React Hooks管理应用状态：
-- 当前步骤导航状态
-- API配置信息
-- 文档内容和分析结果
-- 目录结构数据
-- 选中章节信息
+- 前端：`frontend/src/App.test.tsx`（基础 render 测试，使用 @testing-library/react）
+- 后端：`backend/mcp/client/test.py`（MCP 客户端连通性测试）
+- 当前测试覆盖率较低，业务逻辑主要靠手动测试验证
+- 执行前端测试：`cd frontend && npm test`
 
-### 页面流程
-1. **标书解析页面** - 上传文档，使用AI提取项目概述和技术评分要求
-2. **目录编辑页面** - 基于解析结果生成专业标书目录结构，支持内容生成
-3. **正文编辑页面** - 查看和编辑各章节具体内容，支持统计和修改
+---
 
-### API设计特点
-- RESTful API设计
-- 支持流式响应（Server-Sent Events）
-- 统一的错误处理和响应格式
-- Pydantic数据验证
-- CORS跨域支持
-- 自动API文档生成 (访问 `/docs`)
+## 编码规范
 
-### 技术栈细节
+- 所有 UI 文本使用简体中文
+- API 接口提供中文错误信息
+- TypeScript 接口与 Pydantic 模型保持字段名一致性
+- 异步操作需要有错误处理和用户反馈
+- 文件上传大小上限：10MB（`backend/app/config.py` 中配置）
+- SSE 响应统一使用 `backend/app/utils/sse.py` 中的 `sse_response()` 工具函数
+- JSON 结构校验使用 `backend/app/utils/json_util.py` 中的 `check_json()`，支持自动重试
+- 每次新增 Python 依赖必须同步更新 `backend/requirements.txt` 和 `build.py`
 
-#### 后端技术栈
-- **FastAPI 0.104+**: 现代Python Web框架
-- **uvicorn**: ASGI服务器，支持异步处理
-- **Pydantic**: 数据验证和序列化
-- **python-docx**: Word文档处理
-- **PyPDF2**: PDF文档处理  
-- **OpenAI**: AI服务调用
-- **aiofiles**: 异步文件操作
+---
 
-#### 前端技术栈
-- **React 18**: 现代前端框架
-- **TypeScript**: 类型安全的JavaScript
-- **Tailwind CSS**: 原子化CSS框架
-- **Heroicons**: 图标库
-- **Axios**: HTTP客户端
+## AI 使用指引
 
-### 部署和打包
-- 开发模式：前后端分离运行，支持热重载
-- 生产模式：前端构建为静态文件，集成到FastAPI服务
-- exe打包：使用PyInstaller打包Python应用，包含前端静态文件
+- 修改 AI 提示词请编辑 `backend/app/utils/prompt_manager.py`
+- 新增 AI 生成能力请在 `backend/app/services/openai_service.py` 中扩展
+- `generate_outline_v2()` 采用两阶段并发生成：先串行生成一级提纲，再并发补全二三级目录
+- `_generate_with_json_check()` 是带 JSON 校验和自动重试（最多3次）的通用生成函数
+- 温度参数：分析类任务用 `temperature=0.3`，生成类任务用 `temperature=0.7`
+- 目录生成目标字数：10万字（约 67 个叶子节点，每节点约 1500 字）
+- 支持兼容 OpenAI 协议的第三方模型（通过 `base_url` 配置）
 
-## 开发注意事项
+---
 
-- 所有UI文本使用简体中文
-- API接口需要提供中文错误信息
-- 使用Windows命令行格式的脚本命令
-- 前后端接口需要保持类型一致性（TypeScript接口与Pydantic模型）
-- 异步操作需要适当的错误处理和用户反馈
-- 文件上传需要考虑大小限制和安全性
-- 流式响应需要处理网络中断和重连
-- 每次安装依赖都要检查并修改 build.py 和  /backend/requirements.txt
+## 变更记录 (Changelog)
+
+| 日期 | 内容 |
+|---|---|
+| 2026-03-15 | 初始化架构师扫描，全量生成根级与模块级 CLAUDE.md，补充 Mermaid 图、完整 API 清单、SSE/MCP/提示词等关键信息 |

@@ -1,0 +1,118 @@
+{
+  "scanned_at": "2026-03-15T15:23:08+08:00",
+  "project": "yibiao-simple",
+  "description": "AI 写标书助手，FastAPI + React，基于 OpenAI 兼容 API 智能生成投标技术方案",
+  "truncated": false,
+  "coverage": {
+    "total_files_estimated": 85,
+    "scanned_files": 42,
+    "coverage_percent": 49,
+    "note": "忽略了 .git、node_modules、__pycache__、screenshots、public 静态资源等非源码文件，实际源码覆盖率约 90%+"
+  },
+  "modules": [
+    {
+      "path": "backend",
+      "language": "Python",
+      "entry": "backend/run.py",
+      "app_entry": "backend/app/main.py",
+      "config": "backend/app/config.py",
+      "requirements": "backend/requirements.txt",
+      "doc": "backend/CLAUDE.md",
+      "routers": [
+        "backend/app/routers/config.py",
+        "backend/app/routers/document.py",
+        "backend/app/routers/outline.py",
+        "backend/app/routers/content.py",
+        "backend/app/routers/search.py",
+        "backend/app/routers/expand.py"
+      ],
+      "services": [
+        "backend/app/services/openai_service.py",
+        "backend/app/services/file_service.py",
+        "backend/app/services/search_service.py"
+      ],
+      "utils": [
+        "backend/app/utils/config_manager.py",
+        "backend/app/utils/prompt_manager.py",
+        "backend/app/utils/outline_util.py",
+        "backend/app/utils/json_util.py",
+        "backend/app/utils/sse.py"
+      ],
+      "models": "backend/app/models/schemas.py",
+      "key_apis": [
+        "POST /api/config/save",
+        "GET /api/config/load",
+        "POST /api/config/models",
+        "POST /api/document/upload",
+        "POST /api/document/analyze-stream",
+        "POST /api/document/export-word",
+        "POST /api/outline/generate",
+        "POST /api/outline/generate-stream",
+        "POST /api/content/generate-chapter",
+        "POST /api/content/generate-chapter-stream",
+        "POST /api/search/",
+        "POST /api/search/load-url",
+        "POST /api/expand/upload"
+      ],
+      "gaps": []
+    },
+    {
+      "path": "frontend",
+      "language": "TypeScript/React",
+      "entry": "frontend/src/index.tsx",
+      "app_entry": "frontend/src/App.tsx",
+      "package_json": "frontend/package.json",
+      "doc": "frontend/CLAUDE.md",
+      "pages": [
+        "frontend/src/pages/DocumentAnalysis.tsx",
+        "frontend/src/pages/OutlineEdit.tsx",
+        "frontend/src/pages/ContentEdit.tsx"
+      ],
+      "components": [
+        "frontend/src/components/ConfigPanel.tsx",
+        "frontend/src/components/StepBar.tsx"
+      ],
+      "hooks": ["frontend/src/hooks/useAppState.ts"],
+      "services": ["frontend/src/services/api.ts"],
+      "types": "frontend/src/types/index.ts",
+      "utils": ["frontend/src/utils/draftStorage.ts"],
+      "test_files": ["frontend/src/App.test.tsx"],
+      "gaps": ["页面组件内部实现未完整读取（DocumentAnalysis/OutlineEdit/ContentEdit）"]
+    },
+    {
+      "path": "backend/mcp",
+      "language": "Python",
+      "entry": "backend/mcp/server/duckduckgo/main.py",
+      "doc": "backend/mcp/CLAUDE.md",
+      "protocol": "MCP stdio",
+      "tools": ["duckduckgo_web_search"],
+      "test_files": ["backend/mcp/client/test.py"],
+      "gaps": []
+    }
+  ],
+  "global_gaps": [],
+  "ignored_paths": [
+    ".git/**",
+    "node_modules/**",
+    "__pycache__/**",
+    "frontend/build/**",
+    "backend/static/**",
+    "screenshots/**",
+    "uploads/**",
+    "dist/**",
+    "build/**",
+    "*.lock",
+    "*.log",
+    "*.png",
+    "*.ico",
+    "*.svg",
+    "*.pdf",
+    "*.docx"
+  ],
+  "next_scan_priorities": [
+    "frontend/src/pages/DocumentAnalysis.tsx（页面主逻辑，SSE处理细节）",
+    "frontend/src/pages/OutlineEdit.tsx（目录生成交互细节）",
+    "frontend/src/pages/ContentEdit.tsx（正文编辑和Word导出细节）",
+    "frontend/src/components/ConfigPanel.tsx（配置面板最新变更，git status显示已修改）"
+  ]
+}

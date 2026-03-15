@@ -4,7 +4,22 @@
 import React, { useState } from 'react';
 import { OutlineData, OutlineItem } from '../types';
 import { outlineApi, expandApi } from '../services/api';
-import { ChevronRightIcon, ChevronDownIcon, DocumentTextIcon, PencilIcon, TrashIcon, PlusIcon } from '@heroicons/react/24/outline';
+import {
+  ChevronRightIcon,
+  ChevronDownIcon,
+  DocumentTextIcon,
+  PencilSquareIcon,
+  TrashIcon,
+  PlusIcon,
+  ArrowUpTrayIcon,
+} from '@heroicons/react/24/outline';
+
+const Spinner = ({ className = 'w-4 h-4' }: { className?: string }) => (
+  <svg className={`animate-spin flex-shrink-0 ${className}`} fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+  </svg>
+);
 
 interface OutlineEditProps {
   projectOverview: string;
@@ -31,29 +46,23 @@ const OutlineEdit: React.FC<OutlineEditProps> = ({
   const [oldOutline, setOldOutline] = useState<string | null>(null);
   const [oldDocument, setOldDocument] = useState<string | null>(null);
 
-  // 处理方案扩写文件上传
   const handleExpandUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     try {
       setuploadedExpand(true);
       setMessage(null);
-
       const response = await expandApi.uploadExpandFile(file);
-
       if (response.data.success) {
         setExpandFile(file);
         setOldOutline(response.data.old_outline || null);
         setOldDocument(response.data.file_content || null);
-        setMessage({ type: 'success', text: `方案扩写文件上传成功：${file.name}` });
+        setMessage({ type: 'success', text: `方案文件已上传：${file.name}` });
       } else {
         throw new Error(response.data.message || '文件上传失败');
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.response?.data?.message || error.message || '文件上传失败' });
-    } finally {
-
     }
   };
 
@@ -62,7 +71,6 @@ const OutlineEdit: React.FC<OutlineEditProps> = ({
       setMessage({ type: 'error', text: '请先完成文档分析' });
       return;
     }
-
     try {
       setGenerating(true);
       setMessage(null);
@@ -77,9 +85,7 @@ const OutlineEdit: React.FC<OutlineEditProps> = ({
       });
 
       const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('无法读取响应流');
-      }
+      if (!reader) throw new Error('无法读取响应流');
 
       let result = '';
       const decoder = new TextDecoder();
@@ -87,61 +93,47 @@ const OutlineEdit: React.FC<OutlineEditProps> = ({
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         const chunk = decoder.decode(value, { stream: true });
         const lines = chunk.split('\n');
-
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             const data = line.slice(6);
-            if (data === '[DONE]') {
-              break;
-            }
+            if (data === '[DONE]') break;
             try {
               const parsed = JSON.parse(data);
               if (parsed.chunk) {
                 result += parsed.chunk;
-                // 实时显示生成的内容
                 setStreamingContent(result);
               }
-            } catch (e) {
-              // 忽略JSON解析错误
-            }
+            } catch (e) {}
           }
         }
       }
 
-      // 解析最终结果
       try {
         const outlineJson = JSON.parse(result);
         onOutlineGenerated(outlineJson);
         setMessage({ type: 'success', text: '目录结构生成完成' });
-        setStreamingContent(''); // 清空流式内容
-        
-        // 默认展开所有项目
+        setStreamingContent('');
         const allIds = new Set<string>();
         const collectIds = (items: OutlineItem[]) => {
           items.forEach(item => {
             allIds.add(item.id);
-            if (item.children) {
-              collectIds(item.children);
-            }
+            if (item.children) collectIds(item.children);
           });
         };
         collectIds(outlineJson.outline);
         setExpandedItems(allIds);
-        
-      } catch (parseError) {
+      } catch {
         throw new Error('解析目录结构失败');
       }
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || '目录生成失败' });
-      setStreamingContent(''); // 出错时也清空
+      setStreamingContent('');
     } finally {
       setGenerating(false);
     }
   };
-
 
   const toggleExpanded = (itemId: string) => {
     const newExpanded = new Set(expandedItems);
@@ -153,326 +145,204 @@ const OutlineEdit: React.FC<OutlineEditProps> = ({
     setExpandedItems(newExpanded);
   };
 
-  // 开始编辑目录项
   const startEditing = (item: OutlineItem) => {
     setEditingItem(item.id);
     setEditTitle(item.title);
     setEditDescription(item.description);
   };
 
-  // 取消编辑
   const cancelEditing = () => {
     setEditingItem(null);
     setEditTitle('');
     setEditDescription('');
   };
 
-  // 保存编辑
   const saveEdit = () => {
     if (!outlineData || !editingItem) return;
-
-    const updateItem = (items: OutlineItem[]): OutlineItem[] => {
-      return items.map(item => {
-        if (item.id === editingItem) {
-          return {
-            ...item,
-            title: editTitle.trim(),
-            description: editDescription.trim()
-          };
-        }
-        if (item.children) {
-          return {
-            ...item,
-            children: updateItem(item.children)
-          };
-        }
+    const updateItem = (items: OutlineItem[]): OutlineItem[] =>
+      items.map(item => {
+        if (item.id === editingItem) return { ...item, title: editTitle.trim(), description: editDescription.trim() };
+        if (item.children) return { ...item, children: updateItem(item.children) };
         return item;
       });
-    };
-
-    const updatedData = {
-      ...outlineData,
-      outline: updateItem(outlineData.outline)
-    };
-
-    onOutlineGenerated(updatedData);
+    onOutlineGenerated({ ...outlineData, outline: updateItem(outlineData.outline) });
     cancelEditing();
-    setMessage({ type: 'success', text: '目录项更新成功' });
+    setMessage({ type: 'success', text: '目录项已更新' });
   };
 
-  // 重新分配序号的函数
-  const reorderItems = (items: OutlineItem[], parentPrefix: string = ''): OutlineItem[] => {
-    return items.map((item, index) => {
+  const reorderItems = (items: OutlineItem[], parentPrefix: string = ''): OutlineItem[] =>
+    items.map((item, index) => {
       const newId = parentPrefix ? `${parentPrefix}.${index + 1}` : `${index + 1}`;
-      return {
-        ...item,
-        id: newId,
-        children: item.children ? reorderItems(item.children, newId) : undefined
-      };
+      return { ...item, id: newId, children: item.children ? reorderItems(item.children, newId) : undefined };
     });
-  };
 
-  // 删除目录项
   const deleteItem = (itemId: string) => {
     if (!outlineData) return;
-
     if (window.confirm('确定要删除这个目录项吗？')) {
-      const deleteFromItems = (items: OutlineItem[]): OutlineItem[] => {
-        return items.filter(item => {
-          if (item.id === itemId) {
-            return false;
-          }
-          if (item.children) {
-            item.children = deleteFromItems(item.children);
-          }
+      const deleteFromItems = (items: OutlineItem[]): OutlineItem[] =>
+        items.filter(item => {
+          if (item.id === itemId) return false;
+          if (item.children) item.children = deleteFromItems(item.children);
           return true;
         });
-      };
-
-      // 删除项目后重新排序
-      const filteredItems = deleteFromItems(outlineData.outline);
-      const reorderedItems = reorderItems(filteredItems);
-
-      const updatedData = {
-        ...outlineData,
-        outline: reorderedItems
-      };
-
-      onOutlineGenerated(updatedData);
-      setMessage({ type: 'success', text: '目录项删除成功' });
+      const filtered = deleteFromItems(outlineData.outline);
+      onOutlineGenerated({ ...outlineData, outline: reorderItems(filtered) });
+      setMessage({ type: 'success', text: '目录项已删除' });
     }
   };
 
-  // 添加子目录项
   const addChildItem = (parentId: string) => {
     if (!outlineData) return;
-
-    // 查找父项并计算下一个编号
-    const findParentAndGetNextId = (items: OutlineItem[], targetParentId: string): string | null => {
+    const findNextId = (items: OutlineItem[], targetId: string): string | null => {
       for (const item of items) {
-        if (item.id === targetParentId) {
-          // 找到父项，计算下一个子项编号
+        if (item.id === targetId) {
           const existingChildren = item.children || [];
-          let maxChildNum = 0;
-          
+          let max = 0;
           existingChildren.forEach(child => {
-            const childIdParts = child.id.split('.');
-            const lastPart = childIdParts[childIdParts.length - 1];
-            const num = parseInt(lastPart);
-            if (!isNaN(num)) {
-              maxChildNum = Math.max(maxChildNum, num);
-            }
+            const parts = child.id.split('.');
+            const n = parseInt(parts[parts.length - 1]);
+            if (!isNaN(n)) max = Math.max(max, n);
           });
-          
-          return `${parentId}.${maxChildNum + 1}`;
+          return `${parentId}.${max + 1}`;
         }
-        
         if (item.children) {
-          const result = findParentAndGetNextId(item.children, targetParentId);
+          const result = findNextId(item.children, targetId);
           if (result) return result;
         }
       }
       return null;
     };
-
-    const newId = findParentAndGetNextId(outlineData.outline, parentId) || `${parentId}.1`;
-    const newItem: OutlineItem = {
-      id: newId,
-      title: '新目录项',
-      description: '请编辑描述'
-    };
-
-    const addToItems = (items: OutlineItem[]): OutlineItem[] => {
-      return items.map(item => {
-        if (item.id === parentId) {
-          return {
-            ...item,
-            children: [...(item.children || []), newItem]
-          };
-        }
-        if (item.children) {
-          return {
-            ...item,
-            children: addToItems(item.children)
-          };
-        }
+    const newId = findNextId(outlineData.outline, parentId) || `${parentId}.1`;
+    const newItem: OutlineItem = { id: newId, title: '新目录项', description: '请编辑描述' };
+    const addToItems = (items: OutlineItem[]): OutlineItem[] =>
+      items.map(item => {
+        if (item.id === parentId) return { ...item, children: [...(item.children || []), newItem] };
+        if (item.children) return { ...item, children: addToItems(item.children) };
         return item;
       });
-    };
-
-    const updatedData = {
-      ...outlineData,
-      outline: addToItems(outlineData.outline)
-    };
-
-    onOutlineGenerated(updatedData);
-    
-    // 展开父项
-    setExpandedItems(prev => {
-      const newSet = new Set(prev);
-      newSet.add(parentId);
-      return newSet;
-    });
-    
-    // 自动开始编辑新项
-    setTimeout(() => {
-      startEditing(newItem);
-    }, 100);
-    
-    setMessage({ type: 'success', text: '子目录添加成功' });
+    onOutlineGenerated({ ...outlineData, outline: addToItems(outlineData.outline) });
+    setExpandedItems(prev => new Set(Array.from(prev).concat(parentId)));
+    setTimeout(() => startEditing(newItem), 100);
+    setMessage({ type: 'success', text: '子目录已添加' });
   };
 
-  // 添加根目录项
   const addRootItem = () => {
     if (!outlineData) return;
-
-    // 计算下一个根目录编号
-    let maxRootNum = 0;
+    let maxNum = 0;
     outlineData.outline.forEach(item => {
-      const idParts = item.id.split('.');
-      const firstPart = idParts[0];
-      const num = parseInt(firstPart);
-      if (!isNaN(num)) {
-        maxRootNum = Math.max(maxRootNum, num);
-      }
+      const n = parseInt(item.id.split('.')[0]);
+      if (!isNaN(n)) maxNum = Math.max(maxNum, n);
     });
-
-    const newId = `${maxRootNum + 1}`;
-    const newItem: OutlineItem = {
-      id: newId,
-      title: '新目录项',
-      description: '请编辑描述'
-    };
-
-    const updatedData = {
-      ...outlineData,
-      outline: [...outlineData.outline, newItem]
-    };
-
-    onOutlineGenerated(updatedData);
-    
-    // 自动开始编辑新项
-    setTimeout(() => {
-      startEditing(newItem);
-    }, 100);
-    
-    setMessage({ type: 'success', text: '目录项添加成功' });
+    const newItem: OutlineItem = { id: `${maxNum + 1}`, title: '新目录项', description: '请编辑描述' };
+    onOutlineGenerated({ ...outlineData, outline: [...outlineData.outline, newItem] });
+    setTimeout(() => startEditing(newItem), 100);
+    setMessage({ type: 'success', text: '目录项已添加' });
   };
+
+  // 色彩映射：一级蓝，二级石青，三级灰
+  const levelColors = [
+    'text-blue-700 font-semibold',
+    'text-stone-700 font-medium',
+    'text-stone-600 font-normal',
+  ];
 
   const renderOutlineItem = (item: OutlineItem, level: number = 0) => {
     const hasChildren = item.children && item.children.length > 0;
     const isExpanded = expandedItems.has(item.id);
-    const isLeaf = !hasChildren;
     const isEditing = editingItem === item.id;
 
     return (
-      <div key={item.id} className={`${level > 0 ? 'ml-6' : ''}`}>
-        <div className="group flex items-start space-x-2 py-2 hover:bg-gray-50 rounded px-2">
+      <div key={item.id}>
+        <div
+          className={`group flex items-start gap-2 py-1.5 px-2 rounded hover:bg-stone-50 ${level > 0 ? 'ml-6' : ''}`}
+        >
+          {/* 展开/折叠 or 叶节点图标 */}
           {hasChildren ? (
             <button
               onClick={() => toggleExpanded(item.id)}
-              className="mt-1 p-0.5 rounded hover:bg-gray-200"
+              className="mt-0.5 p-0.5 text-stone-400 hover:text-stone-600 flex-shrink-0"
             >
-              {isExpanded ? (
-                <ChevronDownIcon className="h-4 w-4 text-gray-400" />
-              ) : (
-                <ChevronRightIcon className="h-4 w-4 text-gray-400" />
-              )}
+              {isExpanded
+                ? <ChevronDownIcon className="h-3.5 w-3.5" />
+                : <ChevronRightIcon className="h-3.5 w-3.5" />
+              }
             </button>
           ) : (
-            <DocumentTextIcon className="mt-1 h-4 w-4 text-gray-400" />
+            <DocumentTextIcon className="mt-0.5 h-3.5 w-3.5 text-stone-300 flex-shrink-0" />
           )}
-          
+
           <div className="flex-1 min-w-0">
             {isEditing ? (
-              // 编辑模式
-              <div className="space-y-2">
+              <div className="space-y-2 pr-2">
                 <input
                   type="text"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                  className="form-input py-1 text-sm"
                   placeholder="目录标题"
+                  autoFocus
                 />
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
                   rows={2}
-                  className="w-full px-2 py-1 border border-gray-300 rounded text-xs resize-none"
-                  placeholder="目录描述"
+                  className="form-input py-1 text-xs resize-none"
+                  placeholder="目录描述（可选）"
                 />
-                <div className="flex space-x-2">
-                  <button
-                    onClick={saveEdit}
-                    className="inline-flex items-center px-2 py-1 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700"
-                  >
-                    保存
-                  </button>
-                  <button
-                    onClick={cancelEditing}
-                    className="inline-flex items-center px-2 py-1 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50"
-                  >
-                    取消
-                  </button>
+                <div className="flex gap-2">
+                  <button onClick={saveEdit} className="btn-primary py-1 px-3 text-xs">保存</button>
+                  <button onClick={cancelEditing} className="btn-secondary py-1 px-3 text-xs">取消</button>
                 </div>
               </div>
             ) : (
-              // 正常显示模式
               <>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className={`text-sm font-medium ${
-                      level === 0 ? 'text-blue-600' :
-                      level === 1 ? 'text-green-600' :
-                      'text-gray-700'
-                    }`}>
-                      {item.id} {item.title}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`text-sm truncate ${levelColors[Math.min(level, 2)]}`}>
+                      <span className="text-stone-400 font-mono text-xs mr-1">{item.id}</span>
+                      {item.title}
                     </span>
                     {item.content && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        已生成内容
+                      <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        已生成
                       </span>
                     )}
                   </div>
-                  
-                  {/* 操作按钮组 */}
-                  <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+                  {/* 操作按钮 - hover 显示 */}
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                     <button
                       onClick={() => startEditing(item)}
-                      className="p-1 rounded hover:bg-blue-100 text-blue-600"
+                      className="p-1 rounded hover:bg-blue-50 text-stone-400 hover:text-blue-600"
                       title="编辑"
                     >
-                      <PencilIcon className="h-3 w-3" />
+                      <PencilSquareIcon className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => addChildItem(item.id)}
-                      className="p-1 rounded hover:bg-green-100 text-green-600"
+                      className="p-1 rounded hover:bg-emerald-50 text-stone-400 hover:text-emerald-600"
                       title="添加子目录"
                     >
-                      <PlusIcon className="h-3 w-3" />
+                      <PlusIcon className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={() => deleteItem(item.id)}
-                      className="p-1 rounded hover:bg-red-100 text-red-600"
+                      className="p-1 rounded hover:bg-red-50 text-stone-400 hover:text-red-600"
                       title="删除"
                     >
-                      <TrashIcon className="h-3 w-3" />
+                      <TrashIcon className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">{item.description}</p>
-                
-                {/* 显示生成的内容（如果有） */}
-                {item.content && isLeaf && (
-                  <div className="mt-2 p-3 bg-gray-50 rounded-md border-l-4 border-blue-200">
-                    <div className="text-xs text-gray-600 whitespace-pre-wrap">{item.content}</div>
-                  </div>
+
+                {item.description && (
+                  <p className="text-xs text-stone-400 mt-0.5 leading-relaxed truncate">{item.description}</p>
                 )}
               </>
             )}
           </div>
         </div>
-        
+
         {hasChildren && isExpanded && (
           <div>
             {item.children!.map(child => renderOutlineItem(child, level + 1))}
@@ -483,14 +353,24 @@ const OutlineEdit: React.FC<OutlineEditProps> = ({
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* 操作按钮 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">📋 目录管理</h2>
-        
-        <div className="flex space-x-4">
-          {/* 方案扩写按钮 */}
-          <div className="relative">
+    <div className="max-w-5xl mx-auto space-y-5">
+
+      {/* 消息提示 */}
+      {message && (
+        <div className={message.type === 'success' ? 'alert-success' : 'alert-error'}>
+          {message.text}
+        </div>
+      )}
+
+      {/* 操作区域 */}
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="section-heading">目录管理</h2>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* 方案扩写上传 */}
+          <div>
             <input
               type="file"
               id="expand-file-upload"
@@ -501,24 +381,12 @@ const OutlineEdit: React.FC<OutlineEditProps> = ({
             />
             <label
               htmlFor="expand-file-upload"
-              className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white cursor-pointer ${
-                uploadedExpand
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-green-600 hover:bg-green-700'
-              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500`}
+              className={`btn-secondary gap-2 cursor-pointer ${uploadedExpand ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               {uploadedExpand ? (
-                <>
-                  <div className="animate-spin -ml-1 mr-3 h-4 w-4 text-white">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  </div>
-                  正在分析...
-                </>
+                <><Spinner className="w-3.5 h-3.5" />正在分析...</>
               ) : (
-                '方案扩写'
+                <><ArrowUpTrayIcon className="w-3.5 h-3.5" />方案扩写</>
               )}
             </label>
           </div>
@@ -526,51 +394,40 @@ const OutlineEdit: React.FC<OutlineEditProps> = ({
           <button
             onClick={handleGenerateOutline}
             disabled={generating || !projectOverview || !techRequirements}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400"
+            className="btn-primary gap-2"
           >
             {generating ? (
-              <>
-                <div className="animate-spin -ml-1 mr-3 h-4 w-4 text-white">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                </div>
-                正在生成目录...
-              </>
+              <><Spinner className="w-3.5 h-3.5" />正在生成目录...</>
             ) : (
               '生成目录结构'
             )}
           </button>
-
         </div>
 
-        {/* 显示已上传的方案扩写文件 */}
+        {/* 已上传的方案文件 */}
         {expandFile && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-md">
-            <div className="flex items-center">
-              <DocumentTextIcon className="h-5 w-5 text-green-600 mr-2" />
-              <span className="text-sm text-green-800">
-                已上传方案扩写文件：<span className="font-medium">{expandFile.name}</span>
-              </span>
-            </div>
+          <div className="mt-3 flex items-center gap-2 text-xs text-emerald-700">
+            <DocumentTextIcon className="h-3.5 w-3.5 text-emerald-500" />
+            已上传：<span className="font-medium">{expandFile.name}</span>
           </div>
         )}
 
+        {/* 提示：未完成分析 */}
         {!projectOverview && !techRequirements && (
-          <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
-            <p className="text-sm text-yellow-800">
-              请先在"标书解析"步骤中完成文档分析，获取项目概述和技术评分要求。
-            </p>
+          <div className="mt-3 alert-warning">
+            请先在「标书解析」步骤中完成文档分析，再生成目录。
           </div>
         )}
 
-        {/* 流式生成内容显示 */}
+        {/* 流式内容预览 */}
         {generating && streamingContent && (
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
-            <h4 className="text-sm font-medium text-blue-800 mb-2">正在生成目录结构...</h4>
-            <div className="bg-white p-3 rounded border max-h-48 overflow-y-auto">
-              <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono">
+          <div className="mt-4 border border-stone-200 rounded-lg overflow-hidden">
+            <div className="px-4 py-2 bg-stone-50 border-b border-stone-200 flex items-center gap-2">
+              <Spinner className="w-3 h-3 text-stone-500" />
+              <span className="text-xs text-stone-500 font-medium">正在生成目录结构...</span>
+            </div>
+            <div className="p-4 bg-white max-h-44 overflow-y-auto">
+              <pre className="text-xs text-stone-600 whitespace-pre-wrap font-mono leading-relaxed">
                 {streamingContent}
               </pre>
             </div>
@@ -578,33 +435,28 @@ const OutlineEdit: React.FC<OutlineEditProps> = ({
         )}
       </div>
 
-      {/* 目录结构显示 */}
+      {/* 目录树 */}
       {outlineData && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">目录结构</h3>
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-stone-700">
+              目录结构
+              <span className="ml-2 text-xs font-normal text-stone-400">
+                共 {outlineData.outline.length} 个一级章节
+              </span>
+            </h3>
             <button
               onClick={addRootItem}
-              className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+              className="btn-ghost gap-1 text-xs py-1 px-2"
             >
-              <PlusIcon className="h-4 w-4 mr-1" />
-              添加目录项
+              <PlusIcon className="h-3.5 w-3.5" />
+              添加章节
             </button>
           </div>
-          <div className="border rounded-lg p-4 max-h-96 overflow-y-auto">
+
+          <div className="bg-white border border-stone-200 rounded-lg p-3 max-h-[60vh] overflow-y-auto">
             {outlineData.outline.map(item => renderOutlineItem(item))}
           </div>
-        </div>
-      )}
-
-      {/* 消息提示 */}
-      {message && (
-        <div className={`p-4 rounded-md ${
-          message.type === 'success' 
-            ? 'bg-green-100 text-green-700 border border-green-200' 
-            : 'bg-red-100 text-red-700 border border-red-200'
-        }`}>
-          {message.text}
         </div>
       )}
     </div>

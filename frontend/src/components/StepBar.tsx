@@ -1,5 +1,5 @@
 /**
- * 步骤导航条组件
+ * 步骤导航条组件 - 编号式精工设计
  */
 import React from 'react';
 import { CheckIcon } from '@heroicons/react/24/solid';
@@ -11,52 +11,68 @@ interface StepBarProps {
 
 const StepBar: React.FC<StepBarProps> = ({ steps, currentStep }) => {
   return (
-    <div className="w-full py-6">
-      <nav aria-label="Progress">
-        <ol className="flex items-center">
-          {steps.map((step, index) => (
-            <li key={step} className={`relative ${index !== steps.length - 1 ? 'pr-8 sm:pr-20' : ''} flex-1`}>
-              {index < currentStep ? (
-                <>
-                  <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                    <div className="h-0.5 w-full bg-primary-600" />
-                  </div>
-                  <div className="relative w-8 h-8 flex items-center justify-center bg-primary-600 rounded-full hover:bg-primary-900">
-                    <CheckIcon className="w-5 h-5 text-white" aria-hidden="true" />
-                    <span className="sr-only">{step}</span>
-                  </div>
-                </>
-              ) : index === currentStep ? (
-                <>
-                  <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                    <div className="h-0.5 w-full bg-gray-200" />
-                  </div>
-                  <div className="relative w-8 h-8 flex items-center justify-center bg-white border-2 border-primary-600 rounded-full" aria-current="step">
-                    <span className="h-2.5 w-2.5 bg-primary-600 rounded-full" aria-hidden="true" />
-                    <span className="sr-only">{step}</span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                    <div className="h-0.5 w-full bg-gray-200" />
-                  </div>
-                  <div className="group relative w-8 h-8 flex items-center justify-center bg-white border-2 border-gray-300 rounded-full hover:border-gray-400">
-                    <span className="h-2.5 w-2.5 bg-transparent rounded-full group-hover:bg-gray-300" aria-hidden="true" />
-                    <span className="sr-only">{step}</span>
-                  </div>
-                </>
-              )}
-              <div className="absolute top-[-12] left-1/2 transform -translate-x-1/2 min-w-0 max-w-36 text-center px-2">
-                <span className={`text-sm font-medium whitespace-nowrap ${index <= currentStep ? 'text-primary-600' : 'text-gray-500'}`}>
+    <nav aria-label="进度" className="w-full py-4">
+      <ol className="flex items-center">
+        {steps.map((step, index) => {
+          const isCompleted = index < currentStep;
+          const isCurrent = index === currentStep;
+          const isPending = index > currentStep;
+
+          return (
+            <li
+              key={step}
+              className={`flex items-center ${index !== steps.length - 1 ? 'flex-1' : ''}`}
+            >
+              {/* 步骤项 */}
+              <div className="flex items-center gap-3">
+                {/* 圆圈指示器 */}
+                <div className="relative flex-shrink-0">
+                  {isCompleted ? (
+                    <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
+                      <CheckIcon className="w-3.5 h-3.5 text-white" />
+                    </div>
+                  ) : isCurrent ? (
+                    <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center ring-4 ring-blue-100">
+                      <span className="text-xs font-semibold text-white leading-none">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-stone-100 border border-stone-300 flex items-center justify-center">
+                      <span className="text-xs font-medium text-stone-400 leading-none">
+                        {String(index + 1).padStart(2, '0')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 步骤名称 */}
+                <span
+                  className={`text-sm font-medium whitespace-nowrap ${
+                    isCompleted || isCurrent
+                      ? 'text-stone-900'
+                      : 'text-stone-400'
+                  }`}
+                >
                   {step}
                 </span>
               </div>
+
+              {/* 连接线 */}
+              {index !== steps.length - 1 && (
+                <div className="flex-1 mx-4">
+                  <div
+                    className={`h-px ${
+                      isCompleted ? 'bg-blue-600' : 'bg-stone-200'
+                    }`}
+                  />
+                </div>
+              )}
             </li>
-          ))}
-        </ol>
-      </nav>
-    </div>
+          );
+        })}
+      </ol>
+    </nav>
   );
 };
 

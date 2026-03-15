@@ -4,8 +4,15 @@
 import React, { useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { documentApi } from '../services/api';
-import { CloudArrowUpIcon, DocumentIcon } from '@heroicons/react/24/outline';
+import { ArrowUpTrayIcon, DocumentIcon } from '@heroicons/react/24/outline';
 import { draftStorage } from '../utils/draftStorage';
+
+const Spinner = () => (
+  <svg className="animate-spin w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+  </svg>
+);
 
 interface DocumentAnalysisProps {
   fileContent: string;
@@ -27,66 +34,53 @@ const DocumentAnalysis: React.FC<DocumentAnalysisProps> = ({
   const [analyzing, setAnalyzing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const [localOverview, setLocalOverview] = useState(projectOverview);
   const [localRequirements, setLocalRequirements] = useState(techRequirements);
-  
 
-  // 处理换行符的函数 - 只做基本转换
   const normalizeLineBreaks = (text: string) => {
     if (!text) return text;
-    
     return text
-      .replace(/\\n/g, '\n')  // 将字符串 \n 转换为实际换行符
-      .replace(/\r\n/g, '\n') // Windows换行符
-      .replace(/\r/g, '\n');  // Mac换行符
+      .replace(/\\n/g, '\n')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n');
   };
-  
-  // 流式显示状态
+
   const [currentAnalysisStep, setCurrentAnalysisStep] = useState<'overview' | 'requirements' | null>(null);
   const [streamingOverview, setStreamingOverview] = useState('');
   const [streamingRequirements, setStreamingRequirements] = useState('');
 
-  // 公共的 ReactMarkdown 组件配置
   const markdownComponents = {
-    p: ({ children }: any) => <p className="mb-3 leading-relaxed text-sm" style={{whiteSpace: 'pre-wrap', lineHeight: '1.5'}}>{children}</p>,
-    ul: ({ children }: any) => <ul className="mb-4 pl-5 space-y-1.5 list-disc">{children}</ul>,
-    ol: ({ children }: any) => <ol className="mb-4 pl-5 space-y-1.5 list-decimal">{children}</ol>,
+    p: ({ children }: any) => <p className="mb-3 leading-relaxed text-sm text-stone-700" style={{ whiteSpace: 'pre-wrap' }}>{children}</p>,
+    ul: ({ children }: any) => <ul className="mb-4 pl-5 space-y-1.5 list-disc text-stone-700">{children}</ul>,
+    ol: ({ children }: any) => <ol className="mb-4 pl-5 space-y-1.5 list-decimal text-stone-700">{children}</ol>,
     li: ({ children }: any) => <li className="text-sm leading-relaxed">{children}</li>,
-    h1: ({ children }: any) => <h1 className="text-lg font-semibold mb-3 text-gray-900 border-b border-gray-200 pb-2">{children}</h1>,
-    h2: ({ children }: any) => <h2 className="text-base font-semibold mb-2 text-gray-900">{children}</h2>,
-    h3: ({ children }: any) => <h3 className="text-sm font-semibold mb-2 text-gray-800">{children}</h3>,
-    strong: ({ children }: any) => <strong className="font-semibold text-gray-900">{children}</strong>,
-    em: ({ children }: any) => <em className="italic text-gray-700">{children}</em>,
-    blockquote: ({ children }: any) => <blockquote className="border-l-4 border-green-200 pl-4 my-3 italic text-gray-600">{children}</blockquote>,
-    code: ({ children }: any) => <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">{children}</code>,
-    table: ({ children }: any) => <table className="w-full border-collapse border border-gray-300 my-3">{children}</table>,
-    thead: ({ children }: any) => <thead className="bg-gray-50">{children}</thead>,
-    th: ({ children }: any) => <th className="border border-gray-300 px-3 py-2 text-left font-semibold text-xs">{children}</th>,
-    td: ({ children }: any) => <td className="border border-gray-300 px-3 py-2 text-xs">{children}</td>,
-    br: () => <br className="my-1" />,
-    text: ({ children }: any) => <span style={{whiteSpace: 'pre-wrap'}}>{children}</span>,
+    h1: ({ children }: any) => <h1 className="text-base font-semibold mb-3 text-stone-900 border-b border-stone-200 pb-2">{children}</h1>,
+    h2: ({ children }: any) => <h2 className="text-sm font-semibold mb-2 text-stone-800">{children}</h2>,
+    h3: ({ children }: any) => <h3 className="text-sm font-medium mb-2 text-stone-700">{children}</h3>,
+    strong: ({ children }: any) => <strong className="font-semibold text-stone-900">{children}</strong>,
+    em: ({ children }: any) => <em className="italic text-stone-600">{children}</em>,
+    blockquote: ({ children }: any) => <blockquote className="border-l-2 border-stone-300 pl-4 my-3 italic text-stone-500">{children}</blockquote>,
+    code: ({ children }: any) => <code className="bg-stone-100 px-1.5 py-0.5 rounded text-xs font-mono text-stone-700">{children}</code>,
+    table: ({ children }: any) => <table className="w-full border-collapse border border-stone-200 my-3 text-sm">{children}</table>,
+    thead: ({ children }: any) => <thead className="bg-stone-50">{children}</thead>,
+    th: ({ children }: any) => <th className="border border-stone-200 px-3 py-2 text-left font-semibold text-xs text-stone-700">{children}</th>,
+    td: ({ children }: any) => <td className="border border-stone-200 px-3 py-2 text-xs text-stone-600">{children}</td>,
+    br: () => <br />,
   };
 
-  // 流式显示的紧凑样式配置
   const streamingComponents = {
-    p: ({ children }: any) => <p className="mb-2 leading-tight text-xs text-blue-400" style={{whiteSpace: 'pre-wrap', lineHeight: '1.3'}}>{children}</p>,
-    ul: ({ children }: any) => <ul className="mb-2 pl-3 space-y-0.5 list-disc text-blue-400">{children}</ul>,
-    ol: ({ children }: any) => <ol className="mb-2 pl-3 space-y-0.5 list-decimal text-blue-400">{children}</ol>,
-    li: ({ children }: any) => <li className="text-xs leading-tight text-blue-400">{children}</li>,
-    h1: ({ children }: any) => <h1 className="text-sm font-semibold mb-2 text-blue-500 border-b border-blue-200 pb-1">{children}</h1>,
-    h2: ({ children }: any) => <h2 className="text-xs font-semibold mb-1.5 text-blue-500">{children}</h2>,
-    h3: ({ children }: any) => <h3 className="text-xs font-semibold mb-1 text-blue-400">{children}</h3>,
-    strong: ({ children }: any) => <strong className="font-semibold text-blue-500">{children}</strong>,
-    em: ({ children }: any) => <em className="italic text-blue-400">{children}</em>,
-    blockquote: ({ children }: any) => <blockquote className="border-l-2 border-blue-300 pl-2 my-1.5 italic text-blue-400">{children}</blockquote>,
-    code: ({ children }: any) => <code className="bg-blue-50 px-1 py-0.5 rounded text-xs font-mono text-blue-400">{children}</code>,
-    table: ({ children }: any) => <table className="w-full border-collapse border border-blue-200 my-2">{children}</table>,
-    thead: ({ children }: any) => <thead className="bg-blue-50">{children}</thead>,
-    th: ({ children }: any) => <th className="border border-blue-200 px-2 py-1 text-left font-semibold text-xs text-blue-500">{children}</th>,
-    td: ({ children }: any) => <td className="border border-blue-200 px-2 py-1 text-xs text-blue-400">{children}</td>,
-    br: () => <br className="my-0.5" />,
-    text: ({ children }: any) => <span className="text-blue-400" style={{whiteSpace: 'pre-wrap'}}>{children}</span>,
+    p: ({ children }: any) => <p className="mb-2 leading-snug text-xs text-blue-700" style={{ whiteSpace: 'pre-wrap' }}>{children}</p>,
+    ul: ({ children }: any) => <ul className="mb-2 pl-4 space-y-0.5 list-disc">{children}</ul>,
+    ol: ({ children }: any) => <ol className="mb-2 pl-4 space-y-0.5 list-decimal">{children}</ol>,
+    li: ({ children }: any) => <li className="text-xs leading-snug text-blue-700">{children}</li>,
+    h1: ({ children }: any) => <h1 className="text-sm font-semibold mb-2 text-blue-800">{children}</h1>,
+    h2: ({ children }: any) => <h2 className="text-xs font-semibold mb-1 text-blue-700">{children}</h2>,
+    h3: ({ children }: any) => <h3 className="text-xs font-medium mb-1 text-blue-700">{children}</h3>,
+    strong: ({ children }: any) => <strong className="font-semibold text-blue-800">{children}</strong>,
+    em: ({ children }: any) => <em className="italic text-blue-600">{children}</em>,
+    br: () => <br />,
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,16 +91,22 @@ const DocumentAnalysis: React.FC<DocumentAnalysisProps> = ({
     }
   };
 
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    setIsDragging(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) {
+      setUploadedFile(file);
+      handleFileUpload(file);
+    }
+  };
+
   const handleFileUpload = async (file: File) => {
     try {
       setUploading(true);
       setMessage(null);
-
       const response = await documentApi.uploadFile(file);
-      
       if (response.data.success && response.data.file_content) {
-        // 上传新招标文件：清空上一轮 localStorage（按你的需求）
-        // 注意：这会同时清掉之前保存的草稿/正文内容缓存等
         draftStorage.clearAll();
         onFileUpload(response.data.file_content);
         setMessage({ type: 'success', text: response.data.message });
@@ -134,83 +134,57 @@ const DocumentAnalysis: React.FC<DocumentAnalysisProps> = ({
 
       let overviewResult = '';
       let requirementsResult = '';
-
       const decoder = new TextDecoder();
 
-      // 处理流式响应的通用函数
       const processStream = async (response: Response, onChunk: (chunk: string) => void) => {
         const reader = response.body?.getReader();
-        if (!reader) {
-          throw new Error('无法读取响应流');
-        }
+        if (!reader) throw new Error('无法读取响应流');
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split('\n');
-
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = line.slice(6);
-              if (data === '[DONE]') {
-                break;
-              }
+              if (data === '[DONE]') break;
               try {
                 const parsed = JSON.parse(data);
-                if (parsed.chunk) {
-                  onChunk(parsed.chunk);
-                }
-              } catch (e) {
-                // 忽略JSON解析错误
-              }
+                if (parsed.chunk) onChunk(parsed.chunk);
+              } catch (e) {}
             }
           }
         }
       };
 
-      // 第一步：分析项目概述
       setCurrentAnalysisStep('overview');
       const overviewResponse = await documentApi.analyzeDocumentStream({
         file_content: fileContent,
         analysis_type: 'overview',
       });
-
       await processStream(overviewResponse, (chunk) => {
         overviewResult += chunk;
-        const normalizedContent = normalizeLineBreaks(overviewResult);
-        setStreamingOverview(normalizedContent);
+        setStreamingOverview(normalizeLineBreaks(overviewResult));
       });
+      setLocalOverview(normalizeLineBreaks(overviewResult));
 
-      const finalOverview = normalizeLineBreaks(overviewResult);
-      setLocalOverview(finalOverview);
-
-      // 第二步：分析技术评分要求
       setCurrentAnalysisStep('requirements');
       const requirementsResponse = await documentApi.analyzeDocumentStream({
         file_content: fileContent,
         analysis_type: 'requirements',
       });
-
       await processStream(requirementsResponse, (chunk) => {
         requirementsResult += chunk;
-        const normalizedContent = normalizeLineBreaks(requirementsResult);
-        setStreamingRequirements(normalizedContent);
+        setStreamingRequirements(normalizeLineBreaks(requirementsResult));
       });
+      setLocalRequirements(normalizeLineBreaks(requirementsResult));
 
-      const finalRequirements = normalizeLineBreaks(requirementsResult);
-      setLocalRequirements(finalRequirements);
-
-      // 完成后更新父组件状态
       onAnalysisComplete(overviewResult, requirementsResult);
       setMessage({ type: 'success', text: '标书解析完成' });
-      
-      // 清空流式内容
       setStreamingOverview('');
       setStreamingRequirements('');
       setCurrentAnalysisStep(null);
-
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || '标书解析失败' });
       setStreamingOverview('');
@@ -222,25 +196,54 @@ const DocumentAnalysis: React.FC<DocumentAnalysisProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-6">
+
+      {/* 消息提示 */}
+      {message && (
+        <div className={message.type === 'success' ? 'alert-success' : 'alert-error'}>
+          {message.text}
+        </div>
+      )}
+
       {/* 文件上传区域 */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">📄 文档上传</h2>
-        
-        <div 
-          className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-gray-400 transition-colors cursor-pointer"
+      <div>
+        <h2 className="section-heading mb-4">文档上传</h2>
+        <div
+          className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors ${
+            isDragging
+              ? 'border-blue-400 bg-blue-50'
+              : uploadedFile
+              ? 'border-stone-300 bg-stone-50'
+              : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50'
+          }`}
           onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
         >
-          <CloudArrowUpIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <div className="mt-4">
-            <p className="text-lg text-gray-600">
-              {uploadedFile ? uploadedFile.name : '点击选择文件或拖拽文件到这里'}
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              支持 PDF 和 Word 文档，最大 10MB
-            </p>
-          </div>
-          
+          {uploading ? (
+            <div className="flex flex-col items-center gap-3">
+              <Spinner />
+              <p className="text-sm text-stone-500">正在上传并处理文件...</p>
+            </div>
+          ) : uploadedFile ? (
+            <div className="flex flex-col items-center gap-3">
+              <DocumentIcon className="w-10 h-10 text-blue-500" />
+              <div>
+                <p className="text-sm font-medium text-stone-800">{uploadedFile.name}</p>
+                <p className="text-xs text-stone-400 mt-1">点击重新上传</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <ArrowUpTrayIcon className="w-10 h-10 text-stone-300" />
+              <div>
+                <p className="text-sm font-medium text-stone-600">点击选择文件，或拖拽至此处</p>
+                <p className="text-xs text-stone-400 mt-1">支持 PDF、Word 文档，最大 10 MB</p>
+              </div>
+            </div>
+          )}
+
           <input
             ref={fileInputRef}
             type="file"
@@ -249,62 +252,44 @@ const DocumentAnalysis: React.FC<DocumentAnalysisProps> = ({
             className="hidden"
           />
         </div>
-        
-        {uploading && (
-          <div className="mt-4 text-center">
-            <div className="inline-flex items-center px-4 py-2 text-sm text-blue-600">
-              <div className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              </div>
-              正在上传和处理文件...
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 文档分析区域 */}
       {fileContent && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">🔍 文档分析</h2>
-          
-          <div className="flex justify-center mb-6">
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-heading">文档分析</h2>
             <button
               onClick={handleAnalysis}
               disabled={analyzing}
-              className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="btn-primary gap-2"
             >
               {analyzing ? (
                 <>
-                  <div className="animate-spin -ml-1 mr-3 h-5 w-5 text-white">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  </div>
-                  {currentAnalysisStep === 'overview' ? '正在分析项目概述...' : 
-                   currentAnalysisStep === 'requirements' ? '正在分析技术评分要求...' : 
-                   '正在解析标书...'}
+                  <Spinner />
+                  {currentAnalysisStep === 'overview' ? '正在分析概述...' :
+                   currentAnalysisStep === 'requirements' ? '正在分析评分要求...' : '解析中...'}
                 </>
               ) : (
                 <>
-                  <DocumentIcon className="w-5 h-5 mr-2" />
+                  <DocumentIcon className="w-4 h-4" />
                   解析标书
                 </>
               )}
             </button>
           </div>
 
-          {/* 流式分析内容显示 */}
-          {analyzing && (((currentAnalysisStep === 'overview') && streamingOverview) || ((currentAnalysisStep === 'requirements') && streamingRequirements)) && (
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="text-sm font-medium text-blue-800 mb-3">
-                {currentAnalysisStep === 'overview' ? '正在分析项目概述...' : '正在分析技术评分要求...'}
-              </h4>
-              <div className="bg-white p-3 rounded-lg border border-gray-200 max-h-64 overflow-y-auto shadow-sm">
-                <div className="text-xs prose prose-sm max-w-none">
+          {/* 流式内容显示 */}
+          {analyzing && ((currentAnalysisStep === 'overview' && streamingOverview) || (currentAnalysisStep === 'requirements' && streamingRequirements)) && (
+            <div className="mb-4 border border-blue-100 rounded-lg overflow-hidden">
+              <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
+                <Spinner />
+                <span className="text-xs font-medium text-blue-700">
+                  {currentAnalysisStep === 'overview' ? '正在分析项目概述...' : '正在分析技术评分要求...'}
+                </span>
+              </div>
+              <div className="p-4 bg-white max-h-52 overflow-y-auto">
+                <div className="text-xs">
                   <ReactMarkdown components={streamingComponents}>
                     {currentAnalysisStep === 'overview' ? streamingOverview : streamingRequirements}
                   </ReactMarkdown>
@@ -313,47 +298,30 @@ const DocumentAnalysis: React.FC<DocumentAnalysisProps> = ({
             </div>
           )}
 
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* 项目概述 */}
+          {/* 分析结果双列 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                项目概述
-              </label>
-              <div className="w-full p-4 border border-gray-300 rounded-lg focus-within:ring-blue-500 focus-within:border-blue-500 max-h-80 overflow-y-auto bg-white shadow-sm">
-                <div className="prose prose-sm max-w-none text-gray-800">
+              <p className="form-label mb-2">项目概述</p>
+              <div className="bg-white border border-stone-200 rounded-lg p-4 max-h-72 overflow-y-auto">
+                <div className="prose prose-sm max-w-none">
                   <ReactMarkdown components={markdownComponents}>
-                    {localOverview || '项目概述将在这里显示...'}
+                    {localOverview || '项目概述将在解析后显示...'}
                   </ReactMarkdown>
                 </div>
               </div>
             </div>
 
-            {/* 技术评分要求 */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                技术评分要求
-              </label>
-              <div className="w-full p-4 border border-gray-300 rounded-lg focus-within:ring-green-500 focus-within:border-green-500 max-h-80 overflow-y-auto bg-white shadow-sm">
-                <div className="prose prose-sm max-w-none text-gray-800">
+              <p className="form-label mb-2">技术评分要求</p>
+              <div className="bg-white border border-stone-200 rounded-lg p-4 max-h-72 overflow-y-auto">
+                <div className="prose prose-sm max-w-none">
                   <ReactMarkdown components={markdownComponents}>
-                    {localRequirements || '技术评分要求将在这里显示...'}
+                    {localRequirements || '技术评分要求将在解析后显示...'}
                   </ReactMarkdown>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* 消息提示 */}
-      {message && (
-        <div className={`p-4 rounded-md ${
-          message.type === 'success' 
-            ? 'bg-green-100 text-green-700 border border-green-200' 
-            : 'bg-red-100 text-red-700 border border-red-200'
-        }`}>
-          {message.text}
         </div>
       )}
     </div>
